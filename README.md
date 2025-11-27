@@ -1,66 +1,63 @@
 # 🪙 FCOIN: Quantum Credstick Manager
 
-<div align="center">
+<p align="center">
+  <a href="https://python.org">
+    <img src="https://img.shields.io/badge/Python-3.8%2B-blue?style=flat&logo=python&logoColor=white" alt="Python">
+  </a>
+  <a href="https://ubuntu.com">
+    <img src="https://img.shields.io/badge/Platform-Linux-orange?style=flat&logo=linux&logoColor=white" alt="Platform">
+  </a>
+  <a href="#">
+    <img src="https://img.shields.io/badge/Hardware-ACR122U%20%2F%20PN532-green?style=flat" alt="Hardware">
+  </a>
+  <a href="#">
+    <img src="https://img.shields.io/badge/License-MIT-red?style=flat" alt="License">
+  </a>
+</p>
+<p align="center">
+  <b>Advanced MIFARE Classic heuristics, auto-cracking, and payload generation.</b>
+  <br>
+  <i>Developed by <a href="https://github.com/Nour833">Nour833</a></i>
+</p>
 
-```text
-   _____ ____ ___ ___ _   _ 
-  |  ___/ ___/ _ \_ _| \ | |
-  | |_ | |  | | | | ||  \| |
-  |  _|| |__| |_| | || |\  |
-  |_|   \____\___/___|_| \_|
-````
-
-[](https://python.org)
-[](https://ubuntu.com)
-[](https://www.google.com/search?q=)
-[](https://www.google.com/search?q=)
-
-**Advanced MIFARE Classic heuristics, auto-cracking, and payload generation.** *Developed by [Nour833](https://www.google.com/search?q=https://github.com/Nour833)*
-
-\</div\>
-
------
+---
 
 ## 💀 The Problem: The "4-Bit ACK" Bug
-
-If you use an **ACR122U** reader on Linux with `libnfc`, you know the pain.
+If you use an **ACR122U** reader on Linux with `libnfc`, you know the pain. 
 When writing to MIFARE Classic cards, the card sends a tiny 4-bit acknowledgement signal. The Linux USB driver often misses this signal due to latency, causing the connection to time out before data is written.
 
-**Writing Sector 1 on Linux is a nightmare.** **Writing Sector 1 on Android is instant.**
+> **Writing Sector 1 on Linux is a nightmare. Writing Sector 1 on Android is instant.**
 
 ## ⚡ The Solution: FCOIN
-
 **FCOIN** acts as the "Brain," and your phone acts as the "Muscle."
 
 1.  **The Brain (Linux):** Uses the superior processing power of your PC to crack keys (`mfoc`), map the memory, detect value blocks, and calculate checksums.
 2.  **The Bridge:** It generates precise, copy-pasteable payloads.
 3.  **The Muscle (Android):** You input these payloads into *Mifare Classic Tool (MCT)* on your phone to bypass the USB driver bug and execute the write perfectly.
 
------
+---
 
 ## 👁️ Features
 
-  * **🕵️‍♂️ Quantum Heuristics Engine:** Automatically detects block types:
-      * **WALLETS:** Checks Little Endian integers + Inverted Checksums + Address pointers.
-      * **TIMESTAMPS:** Detects Unix Timestamps (Years 2010–2035) for Parking systems.
-      * **VENDORS:** Decodes ASCII and identifies vendor IDs (e.g., E-CORP).
-  * **🔓 Auto-Cracking:** Wraps `mfoc` (Hardnested Attack) to recover keys from locked cards.
-  * **💾 Key Persistence:** Caches cracked keys to `fcoin.keys` for instant access on subsequent runs.
-  * **🧮 Smart Payload Gen:** Automatically calculates the required hex string for **Value Blocks**, including the inverted backup integrity check.
-  * **🛡️ Dependency Self-Healing:** Detects missing tools and installs them automatically (via sudo).
+* **🕵️‍♂️ Quantum Heuristics Engine:** Automatically detects block types:
+    * **WALLETS:** Checks Little Endian integers + Inverted Checksums + Address pointers.
+    * **TIMESTAMPS:** Detects Unix Timestamps (Years 2010–2035) for Parking systems.
+    * **VENDORS:** Decodes ASCII and identifies vendor IDs (e.g., E-CORP).
+* **🔓 Auto-Cracking:** Wraps `mfoc` (Hardnested Attack) to recover keys from locked cards.
+* **💾 Key Persistence:** Caches cracked keys to `fcoin.keys` for instant access on subsequent runs.
+* **🧮 Smart Payload Gen:** Automatically calculates the required hex string for **Value Blocks**, including the inverted backup integrity check.
+* **🛡️ Dependency Self-Healing:** Detects missing tools and installs them automatically (via sudo).
 
------
+---
 
 ## 🛠️ Installation
 
 ### Prerequisites
-
-  * A Linux environment (Ubuntu/Debian/Kali).
-  * An NFC Reader (ACR122U, PN532, etc.).
-  * An Android Phone with NFC and [Mifare Classic Tool (MCT)](https://github.com/ikarus23/MifareClassicTool).
+* A Linux environment (Ubuntu/Debian/Kali).
+* An NFC Reader (ACR122U, PN532, etc.).
+* An Android Phone with NFC and [Mifare Classic Tool (MCT)](https://github.com/ikarus23/MifareClassicTool).
 
 ### Setup
-
 ```bash
 # 1. Clone the repository
 git clone [https://github.com/Nour833/fcoin.git](https://github.com/Nour833/fcoin.git)
@@ -71,7 +68,7 @@ chmod +x fcoin.py
 
 # 3. Run (Dependencies will auto-install on first run)
 ./fcoin.py
-```
+````
 
 -----
 
@@ -113,16 +110,14 @@ The script will generate a **Mission Briefing** on the screen.
 
 -----
 
-## 📸 Screenshots
-
-### The Forensic Dashboard
+## 📸 Output Example
 
 ```text
-   _____ ____ ___ ___ _   _ 
-  |  ___/ ___/ _ \_ _| \ | |
-  | |_ | |  | | | | ||  \| |
-  |  _|| |__| |_| | || |\  |
-  |_|   \____\___/___|_| \_|
+ _____ ____ ___ ___ _   _ 
+|  ___/ ___/ _ \_ _| \ | |
+| |_ | |  | | | | ||  \| |
+|  _|| |__| |_| | || |\  |
+|_|   \____\___/___|_| \_| v13.1
 
       [ QUANTUM CREDSTICK MANAGER ]      
               Dev: Nour833               
@@ -155,14 +150,10 @@ This tool is intended for security research and managing your own hardware. The 
 
 1.  Any damage caused to hardware (Bricked cards).
 2.  Any legal consequences arising from the misuse of this tool.
-3.  Lost laundry money.
+3.  Lost data.
 
 **Always have permission before analyzing cards you do not own.**
 
 -----
 
-\<div align="center"\>
-
 *"I wanted to save the world."*
-
-\</div\>
