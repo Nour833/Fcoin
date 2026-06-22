@@ -13,7 +13,7 @@
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-45E1FF?style=flat-square&logo=python&logoColor=0B0F14)](https://python.org)
 [![Zero runtime dependencies](https://img.shields.io/badge/runtime_dependencies-0-7DFFB2?style=flat-square)](#installation)
-[![Tests](https://img.shields.io/badge/tests-27_passing-7DFFB2?style=flat-square)](#development)
+[![Tests](https://img.shields.io/badge/tests-29_passing-7DFFB2?style=flat-square)](#development)
 [![License: MIT](https://img.shields.io/badge/license-MIT-FFCF70?style=flat-square)](LICENSE)
 
 **Acquire. Validate. Understand. Plan. Record. Verify. Recover.**
@@ -45,7 +45,7 @@ This opens a colorful full-screen dashboard instead of printing raw command help
 The dashboard provides guided menus for:
 
 - Reader and imported-dump backups.
-- Inspection, validation, comparison, and evidence questions.
+- Live-card inspection with automatic backup, saved-backup browsing, validation, comparison, and evidence questions.
 - Reports, conversion, inference, and inventory.
 - Owned-laboratory profile and value-plan workflows.
 - Transaction preparation, verification, recovery, history, and journals.
@@ -205,6 +205,38 @@ Snapshots are stored under:
 Override that location with `FCOIN_HOME` or `--home`.
 
 ### 3. Inspect and validate
+
+Open the guided Inspect source menu:
+
+```bash
+fcoin inspect
+```
+
+The menu offers:
+
+- **Read card now + auto-backup:** reads the live card twice, requires both images to match, creates an immutable session backup, then analyzes it.
+- **Open a saved FCOIN backup:** browses existing sessions by UID, state, card type, and session ID.
+- **Open a dump file:** selects an MFD, dump, or binary file from disk.
+
+Use the same sources directly from the CLI:
+
+```bash
+# Live card: two reads, automatic secure backup, then inspection
+fcoin inspect --reader
+
+# Live card with an owned key dictionary
+fcoin inspect --reader --keys ~/.config/fcoin/owned-lab.keys
+
+# Existing immutable backup
+fcoin inspect --session <session-id>
+
+# Ordinary file
+fcoin inspect card.mfd
+```
+
+Live inspection stores the verified image under the normal session directory and prints both the session ID and backup path before displaying findings.
+
+Validate or inspect a file directly:
 
 ```bash
 fcoin validate card.mfd
@@ -484,7 +516,7 @@ Sensitive artifacts use mode `0600`; session directories use `0700`. Dumps, keys
 | `doctor` | Check `mfoc`, libnfc tools, and reader visibility |
 | `backup` | Create an immutable imported or double-read snapshot |
 | `validate` | Validate geometry, dump size, BCC indication, and access bits |
-| `inspect` | Run explainable deterministic detectors |
+| `inspect` | Inspect a file, saved backup, or live card with automatic backup |
 | `compare` | Produce a block-, byte-, and bit-level diff |
 | `infer` | Correlate structural value blocks across controlled samples |
 | `ask` | Query deterministic analysis evidence |

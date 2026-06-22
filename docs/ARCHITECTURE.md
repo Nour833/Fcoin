@@ -16,6 +16,8 @@ An analysis finding is not an authorization. A writable plan additionally requir
 6. A bounded exact decimal.
 7. A user authorization phrase.
 
+Live inspection follows the acquisition trust model rather than bypassing it: the card is read twice, both complete images must match, and the verified image is persisted as an immutable session snapshot before detectors run.
+
 ## Domain layers
 
 ### Protocol

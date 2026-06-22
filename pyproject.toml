@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fcoin"
-version = "2.1.0"
+version = "2.2.0"
 description = "Local-first MIFARE Classic backup, validation, analysis, comparison, and guarded restoration toolkit"
 readme = "README.md"
 requires-python = ">=3.11"

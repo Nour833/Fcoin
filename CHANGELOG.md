@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.2.0 — 2026-06-22
+
+- Added direct live-card inspection with `fcoin inspect --reader`.
+- Live inspection now performs two matching reads and automatically saves an immutable backup before analysis.
+- Added `fcoin inspect --session <id>` for inspecting saved FCOIN backups.
+- Added an interactive Inspect source menu for live cards, session backups, and disk files.
+- Added live-reader key dictionary, probe-count, and timeout controls.
+- Added session ID and backup-path details to inspection output and JSON.
+
 ## 2.1.0 — 2026-06-22
 
 - Added a colorful full-screen control center for no-argument `fcoin`.

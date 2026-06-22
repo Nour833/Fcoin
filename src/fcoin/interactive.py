@@ -487,10 +487,51 @@ class InteractiveApp:
             self._journal()
 
     def _inspect(self) -> None:
-        dump = self._choose_path("SELECT DUMP TO INSPECT", (".mfd", ".dump", ".bin"))
-        if not dump:
+        source = self._select(
+            "INSPECT A CARD",
+            "Read a live card, open a secure backup, or choose another dump file.",
+            (
+                MenuItem(
+                    "1",
+                    "Read card now + auto-backup",
+                    "Acquire twice, require matching reads, save the backup, then inspect.",
+                    "green",
+                ),
+                MenuItem(
+                    "2",
+                    "Open a saved FCOIN backup",
+                    "Browse immutable before.mfd images by UID and session state.",
+                    "violet",
+                ),
+                MenuItem(
+                    "3",
+                    "Open a dump file",
+                    "Choose an MFD, dump, or binary image from disk.",
+                ),
+                MenuItem("b", "Back", "Return without inspecting.", "red"),
+            ),
+        )
+        if source == "1":
+            key_file = self._optional_file("Optional key dictionary", (".keys", ".txt"))
+            probes = self.console.prompt("Probe count", "50")
+            argv = ["inspect", "--reader", "--probes", probes]
+            if key_file:
+                argv.extend(["--keys", key_file])
+        elif source == "2":
+            session = self._choose_session("SELECT BACKUP TO INSPECT")
+            if not session:
+                return
+            argv = ["inspect", "--session", session.id]
+        elif source == "3":
+            dump = self._choose_path(
+                "SELECT DUMP TO INSPECT",
+                (".mfd", ".dump", ".bin"),
+            )
+            if not dump:
+                return
+            argv = ["inspect", dump]
+        else:
             return
-        argv = ["inspect", dump]
         if self.console.confirm("Show every block and low-confidence interpretation?", False):
             argv.append("--all")
         self._execute(argv)

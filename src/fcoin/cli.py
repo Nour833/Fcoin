@@ -68,6 +68,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     inspect_parser = sub.add_parser("inspect", help="Analyze a dump with explainable detectors.")
     inspect_parser.add_argument("dump", nargs="?")
+    inspect_source = inspect_parser.add_mutually_exclusive_group()
+    inspect_source.add_argument(
+        "--reader",
+        action="store_true",
+        help="Read the live card twice, save a verified backup, then inspect it.",
+    )
+    inspect_source.add_argument(
+        "--session",
+        help="Inspect the immutable before.mfd image from a saved FCOIN session.",
+    )
+    inspect_parser.add_argument("--keys", help="Optional key dictionary for live reader mode.")
+    inspect_parser.add_argument("--probes", type=int, default=50)
+    inspect_parser.add_argument("--timeout", type=int, default=600)
     inspect_parser.add_argument(
         "--all",
         action="store_true",
@@ -227,13 +240,55 @@ def _summary_rows(report: Any, include_all: bool) -> list[tuple[object, ...]]:
     return rows
 
 
-def command_inspect(args: argparse.Namespace, console: Console, _: SessionStore) -> int:
-    report = analyze(CardImage.from_file(args.dump))
+def command_inspect(args: argparse.Namespace, console: Console, store: SessionStore) -> int:
+    selected_sources = sum(bool(value) for value in (args.dump, args.reader, args.session))
+    if selected_sources != 1:
+        raise ValidationError(
+            "Inspect requires exactly one source: a dump path, --session, or --reader."
+        )
+
+    session = None
+    if args.reader:
+        console.banner()
+        console.section(
+            "LIVE CARD INSPECTION",
+            "two matching reads · automatic immutable backup",
+        )
+        console.warning("Keep the owned card stable until both reads finish.")
+        result = MfocAcquirer(
+            key_file=args.keys,
+            probes=args.probes,
+            timeout=args.timeout,
+        ).acquire_verified()
+        session = store.create(
+            result.first,
+            result.second,
+            source="inspect_live_mfoc_double_read",
+            acquisition_log=result.log,
+        )
+        image = result.first
+    elif args.session:
+        session = store.get(args.session)
+        image = session.image()
+    else:
+        image = CardImage.from_file(args.dump)
+
+    report = analyze(image)
     if args.json:
-        _json(report.to_dict())
+        output = report.to_dict()
+        if session is not None:
+            output["session_id"] = session.id
+            output["backup_path"] = str(session.secure_path("before.mfd"))
+            output["automatic_backup_created"] = bool(args.reader)
+        _json(output)
         return 0
     console.banner()
     console.section("CARD IMAGE", report.card_type)
+    if session is not None:
+        console.info("Session", session.id)
+        console.info("Backup", session.secure_path("before.mfd"))
+        if args.reader:
+            console.success("Two reads matched; immutable backup saved before analysis.")
     console.info("UID prefix", report.uid)
     console.info("SHA-256", report.sha256)
     console.info("Image size", f"{report.byte_size} bytes")
@@ -686,7 +741,6 @@ def _overview(console: Console, parser: argparse.ArgumentParser) -> None:
 
 def _missing_arguments(args: argparse.Namespace) -> tuple[str, ...]:
     requirements: dict[str, tuple[str, ...]] = {
-        "inspect": ("dump",),
         "validate": ("dump",),
         "compare": ("before", "after"),
         "report": ("dump", "output"),
@@ -705,6 +759,8 @@ def _missing_arguments(args: argparse.Namespace) -> tuple[str, ...]:
         for name in requirements.get(args.command, ())
         if getattr(args, name, None) in {None, ""}
     ]
+    if args.command == "inspect" and not (args.dump or args.reader or args.session):
+        missing.append("source (dump, --session, or --reader)")
     if args.command == "backup" and not (args.from_dump or args.reader):
         missing.append("source (--reader or --from-dump)")
     if args.command == "infer" and len(args.dumps) < 2:
