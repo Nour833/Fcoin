@@ -1,0 +1,26 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+.venv/
+venv/
+
+# NFC material can contain credentials and personal identifiers.
+fcoin.keys
+*.keys
+*.mfd
+*.dump
+*.bin
+sessions/
+reports/
+plans/
+
+# Local configuration.
+.env
+.DS_Store

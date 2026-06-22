@@ -1,0 +1,1 @@
+"""FCOIN tests."""

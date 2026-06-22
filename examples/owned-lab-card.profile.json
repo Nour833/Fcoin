@@ -1,0 +1,23 @@
+{
+  "name": "synthetic-owned-lab-card",
+  "description": "Example only; DEADBEEF is the synthetic test-fixture UID prefix.",
+  "lab_only": true,
+  "allowed_uids": [
+    "DEADBEEF"
+  ],
+  "fields": [
+    {
+      "name": "test_value",
+      "type": "value_block",
+      "block": 4,
+      "mirrors": [
+        5
+      ],
+      "scale": 100,
+      "unit": "test credits",
+      "minimum": "0.00",
+      "maximum": "100.00",
+      "writable": true
+    }
+  ]
+}
