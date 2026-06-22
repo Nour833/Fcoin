@@ -60,3 +60,9 @@ Profiles cannot override protocol safety. FCOIN still refuses:
 - Values outside signed 32-bit range.
 - Excess decimal precision.
 - More than four blocks in one surgical value plan.
+
+## Interactive detected profiles
+
+After selecting a verified backup, the interactive value editor can identify structurally valid value blocks whose access bits permit direct writes. The user chooses the candidate, scale, unit, and safety bounds. FCOIN then saves an exact-UID profile inside that same session.
+
+Equal values in one sector are presented as possible mirrors, but grouping requires explicit confirmation. Declining the suggestion allows one primary block to be selected instead. Detection never changes `before.mfd`.

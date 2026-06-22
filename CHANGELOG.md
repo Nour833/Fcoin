@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.3.0 — 2026-06-22
+
+- Fixed the value-edit wizard asking for an unexplained path after backup selection.
+- Added guided detection of structurally valid writable value blocks from the selected backup.
+- Added automatic exact-UID profile creation inside the selected session.
+- Added explicit confirmation before treating equal-value blocks as mirrors.
+- Added clear existing-profile discovery without re-requesting the card backup.
+- Audited and clarified all intentional multi-file prompts.
+- Added a live NFC tool, reader, card-presence, and UID status rail to every menu.
+- Added automatic menu refresh while connection or card state changes.
+- Added an operation lock that stops and drains monitoring before any card operation.
+- Disabled all hardware probing while an external write or recovery is pending.
+
 ## 2.2.0 — 2026-06-22
 
 - Added direct live-card inspection with `fcoin inspect --reader`.

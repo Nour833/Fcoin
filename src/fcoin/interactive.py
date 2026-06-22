@@ -3,14 +3,26 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
+import re
+import select
 import sys
 from typing import Callable
 
 from fcoin import __version__
 from fcoin.acquisition import dependency_status
+from fcoin.errors import FcoinError
+from fcoin.profiles import (
+    CardProfile,
+    DetectedValueGroup,
+    detected_profile,
+    detect_writable_value_groups,
+)
+from fcoin.status import LiveNfcMonitor
 from fcoin.storage import Session, SessionStore
 from fcoin.ui import Console
+from fcoin.value import scaled_integer_to_decimal
 
 
 CommandRunner = Callable[[list[str]], int]
@@ -71,8 +83,11 @@ class InteractiveApp:
         self.console = console
         self.store = store
         self.run_command = run_command
+        self.monitor = LiveNfcMonitor()
 
     def run(self, initial_command: str | None = None) -> int:
+        self._sync_monitor_safety()
+        self.monitor.start()
         try:
             if initial_command:
                 self.run_wizard(initial_command)
@@ -101,6 +116,8 @@ class InteractiveApp:
         except ExitDashboard:
             self._goodbye()
             return 0
+        finally:
+            self.monitor.stop()
 
     def run_wizard(self, command: str) -> None:
         wizard = {
@@ -129,17 +146,58 @@ class InteractiveApp:
         wizard()
 
     def _dashboard_header(self, title: str, subtitle: str) -> None:
+        self._sync_monitor_safety()
         self.console.clear()
         self.console.logo()
         p = self.console.p
         tools = dependency_status()
         tool_count = sum(path != "missing" for path in tools.values())
         session_count = len(self.store.list())
+        status = self.monitor.snapshot()
+        hardware_monitor_paused = "external write or recovery" in status.detail
+        tool_icon = f"{p.green}●{p.reset}" if status.tool_available else f"{p.red}●{p.reset}"
+        reader_icon = (
+            f"{p.violet}●{p.reset}"
+            if hardware_monitor_paused
+            else (
+                f"{p.green}●{p.reset}"
+                if status.reader_online
+                else f"{p.red}●{p.reset}"
+            )
+        )
+        card_polling_paused = "paused" in status.detail
+        card_icon = (
+            f"{p.violet}●{p.reset}"
+            if card_polling_paused
+            else (
+                f"{p.green}●{p.reset}"
+                if status.card_present
+                else f"{p.amber}●{p.reset}"
+            )
+        )
+        if hardware_monitor_paused:
+            reader_text = "MONITOR PAUSED"
+            card_text = "SAFE WRITE MODE"
+        else:
+            reader_text = "READER ONLINE" if status.reader_online else "READER OFFLINE"
+            if card_polling_paused:
+                card_text = "CARD POLL PAUSED"
+            else:
+                card_text = (
+                    f"CARD {status.uid}"
+                    if status.card_present and status.uid
+                    else "NO CARD"
+                )
         print()
         print(
             f"  {p.slate}FCOIN {__version__}{p.reset}  "
             f"{p.slate}│{p.reset}  {p.green}{tool_count}/3 NFC tools{p.reset}  "
             f"{p.slate}│{p.reset}  {p.violet}{session_count} sessions{p.reset}"
+        )
+        print(
+            f"  {tool_icon} NFC TOOL  {p.slate}│{p.reset}  "
+            f"{reader_icon} {reader_text}  {p.slate}│{p.reset}  "
+            f"{card_icon} {card_text}"
         )
         print(f"  {p.slate}State: {self.store.home}{p.reset}")
         print(f"\n  {p.bold}{title}{p.reset}")
@@ -186,7 +244,9 @@ class InteractiveApp:
                 f"  {p.slate}↑/↓ navigate  ENTER select  1–9 shortcut  "
                 f"b/ESC back  q quit{p.reset}"
             )
-            key = self._read_key()
+            key = self._read_key(timeout=0.65)
+            if key == "tick":
+                continue
             if key in {"up", "k"}:
                 selected = (selected - 1) % len(items)
             elif key in {"down", "j"}:
@@ -204,7 +264,7 @@ class InteractiveApp:
                         return item.key
 
     @staticmethod
-    def _read_key() -> str:
+    def _read_key(timeout: float = 0.65) -> str:
         try:
             import termios
             import tty
@@ -213,6 +273,9 @@ class InteractiveApp:
             previous = termios.tcgetattr(descriptor)
             try:
                 tty.setraw(descriptor)
+                ready, _, _ = select.select([sys.stdin], [], [], timeout)
+                if not ready:
+                    return "tick"
                 char = sys.stdin.read(1)
                 if not char:
                     return "q"
@@ -233,11 +296,31 @@ class InteractiveApp:
             return input().strip().casefold() or "enter"
 
     def _execute(self, argv: list[str], *, pause: bool = True) -> int:
+        self.monitor.pause()
         self.console.clear()
-        result = self.run_command(argv)
-        if pause:
-            self.console.pause()
-        return result
+        try:
+            result = self.run_command(argv)
+            if pause:
+                self.console.pause()
+            return result
+        finally:
+            self._sync_monitor_safety()
+            self.monitor.resume()
+
+    def _sync_monitor_safety(self) -> None:
+        protected_states = {"write_pending", "recovery_planned"}
+        protected = any(
+            session.metadata().get("status") in protected_states
+            for session in self.store.list()
+        )
+        self.monitor.set_card_polling(
+            not protected,
+            (
+                "card polling paused while an external write or recovery is pending"
+                if protected
+                else "card polling paused"
+            ),
+        )
 
     def _choose_path(
         self,
@@ -281,7 +364,7 @@ class InteractiveApp:
         if choice in {None, "b", "q"}:
             return None
         if choice == "m":
-            value = self.console.prompt("Path")
+            value = self.console.prompt("Enter the exact file or directory path")
             return str(Path(value).expanduser()) if value else None
         index = int(choice) - 1
         return str(candidates[index].resolve())
@@ -550,7 +633,10 @@ class InteractiveApp:
             self._execute(["compare", before, after])
 
     def _ask(self) -> None:
-        dump = self._choose_path("SELECT DUMP", (".mfd", ".dump", ".bin"))
+        dump = self._choose_path(
+            "SELECT DUMP TO ASK ABOUT",
+            (".mfd", ".dump", ".bin"),
+        )
         if not dump:
             return
         question = self.console.prompt(
@@ -601,7 +687,11 @@ class InteractiveApp:
         self._execute(["convert", path, "--from", source, "--to", target, "--output", output])
 
     def _inventory(self) -> None:
-        directory = self._choose_path("SELECT DIRECTORY", (), directory=True)
+        directory = self._choose_path(
+            "SELECT DIRECTORY TO INVENTORY",
+            (),
+            directory=True,
+        )
         if not directory:
             return
         argv = ["inventory", directory]
@@ -646,10 +736,39 @@ class InteractiveApp:
         session = self._choose_session("SELECT VERIFIED SESSION", double_read_only=True)
         if not session:
             return
-        profile = self._choose_path("SELECT LAB PROFILE", (".json",))
-        if not profile:
+        source = self._select(
+            "CHOOSE VALUE DEFINITION",
+            (
+                "The backup is already selected. Now choose how FCOIN should identify "
+                "the editable laboratory field."
+            ),
+            (
+                MenuItem(
+                    "1",
+                    "Detect valid value blocks in this backup",
+                    "Choose a detected value and save its UID-bound profile in the session.",
+                    "green",
+                ),
+                MenuItem(
+                    "2",
+                    "Use an existing lab profile",
+                    "Choose a previously reviewed profile, not another backup.",
+                    "violet",
+                ),
+                MenuItem("b", "Back", "Return without creating a plan.", "red"),
+            ),
+        )
+        if source == "1":
+            profile = self._create_detected_profile(session)
+        elif source == "2":
+            profile = self._choose_existing_profile(session)
+        else:
             return
-        field = self.console.prompt("Profile field name", "test_value")
+        if profile is None:
+            return
+        field = self._choose_profile_field(profile, session)
+        if field is None:
+            return
         value = self.console.prompt("New displayed value")
         self.console.clear()
         self.console.banner()
@@ -666,7 +785,7 @@ class InteractiveApp:
                 "--session",
                 session.id,
                 "--profile",
-                profile,
+                str(profile),
                 "--field",
                 field,
                 "--value",
@@ -676,11 +795,234 @@ class InteractiveApp:
             ]
         )
 
+    def _create_detected_profile(self, session: Session) -> Path | None:
+        image = session.image()
+        groups = detect_writable_value_groups(image)
+        if not groups:
+            self.console.clear()
+            self.console.banner()
+            self.console.warning(
+                "No structurally valid, directly writable MIFARE value blocks were found."
+            )
+            self.console.pause()
+            return None
+        items = tuple(
+            MenuItem(
+                str(index + 1),
+                (
+                    f"Sector {group.sector} · "
+                    f"block{'s' if len(group.blocks) > 1 else ''} "
+                    f"{', '.join(str(block) for block in group.blocks)}"
+                ),
+                (
+                    f"Raw value {group.value} · encoded addresses "
+                    f"{', '.join(str(address) for address in group.encoded_addresses)} · "
+                    f"write {', '.join(group.write_modes)}"
+                ),
+                "green",
+            )
+            for index, group in enumerate(groups[:8])
+        ) + (
+            MenuItem(
+                "b",
+                "Back",
+                "Return without creating a detected profile.",
+                "red",
+            ),
+        )
+        choice = self._select(
+            "DETECTED VALUE BLOCKS",
+            "Choose the logical value. Same-sector equal copies are grouped as mirrors.",
+            items,
+        )
+        if choice in {None, "b", "q"}:
+            return None
+        group = groups[int(choice) - 1]
+        if len(group.blocks) > 1 and not self.console.confirm(
+            (
+                "Treat all detected equal-value blocks "
+                f"({', '.join(str(block) for block in group.blocks)}) as mirrors?"
+            ),
+            False,
+        ):
+            block_items = tuple(
+                MenuItem(
+                    str(index + 1),
+                    f"Block {block}",
+                    (
+                        f"Encoded address {group.encoded_addresses[index]} · "
+                        f"write {group.write_modes[index]}"
+                    ),
+                    "green",
+                )
+                for index, block in enumerate(group.blocks)
+            ) + (
+                MenuItem("b", "Back", "Return without selecting a primary block.", "red"),
+            )
+            block_choice = self._select(
+                "SELECT PRIMARY BLOCK",
+                "Only the selected block will be included in this profile.",
+                block_items,
+            )
+            if block_choice in {None, "b", "q"}:
+                return None
+            index = int(block_choice) - 1
+            group = DetectedValueGroup(
+                sector=group.sector,
+                value=group.value,
+                blocks=(group.blocks[index],),
+                encoded_addresses=(group.encoded_addresses[index],),
+                write_modes=(group.write_modes[index],),
+            )
+
+        field_name = self.console.prompt("Field name", "detected_value")
+        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]{0,63}", field_name):
+            self.console.warning(
+                "Field name must start with a letter and contain only letters, numbers, _ or -."
+            )
+            self.console.pause()
+            return None
+        scale_text = self.console.prompt(
+            "Scale (100 means two decimal places)",
+            "100",
+        )
+        try:
+            scale = int(scale_text)
+            if scale <= 0:
+                raise ValueError
+        except ValueError:
+            self.console.warning("Scale must be a positive integer.")
+            self.console.pause()
+            return None
+        current = scaled_integer_to_decimal(group.value, scale)
+        self.console.info("Current displayed", current)
+        unit = self.console.prompt("Unit label", "test credits")
+        minimum = self.console.prompt("Minimum allowed value", "0.00")
+        default_maximum = format(max(Decimal("100.00"), current), "f")
+        maximum = self.console.prompt(
+            "Maximum allowed value (safety boundary)",
+            default_maximum,
+        )
+        try:
+            low = Decimal(minimum)
+            high = Decimal(maximum)
+            if not low.is_finite() or not high.is_finite() or low > high:
+                raise InvalidOperation
+        except InvalidOperation:
+            self.console.warning(
+                "Minimum and maximum must be finite decimals with minimum ≤ maximum."
+            )
+            self.console.pause()
+            return None
+
+        profile = detected_profile(
+            image,
+            group,
+            name=f"{session.metadata()['uid']}-detected-lab",
+            field_name=field_name,
+            scale=scale,
+            unit=unit,
+            minimum=minimum,
+            maximum=maximum,
+        )
+        path = session.secure_path(f"{field_name}.profile.json")
+        profile.save(path)
+        self.console.success(f"Saved UID-bound profile inside the selected session: {path.name}")
+        return path
+
+    def _choose_existing_profile(self, session: Session) -> Path | None:
+        candidates: list[Path] = []
+        roots = (session.path, Path.cwd(), Path.cwd() / "examples")
+        for root in roots:
+            if not root.is_dir():
+                continue
+            for pattern in ("*.profile.json", "*.json"):
+                for path in root.glob(pattern):
+                    resolved = path.resolve()
+                    if resolved not in candidates:
+                        candidates.append(resolved)
+        candidates.sort(key=lambda path: (path.parent != session.path, path.name.casefold()))
+        items = tuple(
+            MenuItem(
+                str(index + 1),
+                path.name,
+                (
+                    "Stored in selected session"
+                    if path.parent == session.path
+                    else str(path.parent)
+                ),
+                "violet",
+            )
+            for index, path in enumerate(candidates[:8])
+        ) + (
+            MenuItem(
+                "m",
+                "Enter profile path manually",
+                "This must be a laboratory profile JSON file, not a card backup.",
+            ),
+            MenuItem("b", "Back", "Return without selecting a profile.", "red"),
+        )
+        choice = self._select(
+            "SELECT LAB PROFILE",
+            "The card backup is already selected; choose only its field-definition profile.",
+            items,
+        )
+        if choice in {None, "b", "q"}:
+            return None
+        if choice == "m":
+            value = self.console.prompt("Laboratory profile JSON path")
+            return Path(value).expanduser().resolve() if value else None
+        return candidates[int(choice) - 1]
+
+    def _choose_profile_field(
+        self,
+        profile_path: Path,
+        session: Session,
+    ) -> str | None:
+        try:
+            profile = CardProfile.load(profile_path)
+            profile.authorize_uid(session.metadata()["uid"])
+        except FcoinError as exc:
+            self.console.clear()
+            self.console.banner()
+            self.console.error(str(exc))
+            self.console.pause()
+            return None
+        if len(profile.fields) == 1:
+            return profile.fields[0].name
+        items = tuple(
+            MenuItem(
+                str(index + 1),
+                field.name,
+                (
+                    f"Primary block {field.block} · mirrors "
+                    f"{', '.join(str(block) for block in field.mirrors) or 'none'} · "
+                    f"scale {field.scale} · {field.unit}"
+                ),
+                "green",
+            )
+            for index, field in enumerate(profile.fields[:8])
+        ) + (MenuItem("b", "Back", "Return without selecting a field.", "red"),)
+        choice = self._select(
+            "SELECT PROFILE FIELD",
+            f"Profile: {profile.name}",
+            items,
+        )
+        if choice in {None, "b", "q"}:
+            return None
+        return profile.fields[int(choice) - 1].name
+
     def _apply_plan(self) -> None:
-        dump = self._choose_path("SELECT SOURCE DUMP", (".mfd", ".dump", ".bin"))
+        dump = self._choose_path(
+            "SELECT IMAGE THE PLAN WILL BE APPLIED TO",
+            (".mfd", ".dump", ".bin"),
+        )
         if not dump:
             return
-        plan = self._choose_path("SELECT CHANGE PLAN", (".json",))
+        plan = self._choose_path(
+            "SELECT CHANGE-PLAN JSON (NOT A CARD BACKUP)",
+            (".json",),
+        )
         if not plan:
             return
         output = self.console.prompt("Preview output", "fcoin-preview.mfd")
@@ -694,7 +1036,10 @@ class InteractiveApp:
         plan = (
             str(default)
             if default.is_file()
-            else self._choose_path("SELECT CHANGE PLAN", (".json",))
+            else self._choose_path(
+                "SELECT CHANGE-PLAN JSON FOR THIS SESSION",
+                (".json",),
+            )
         )
         if plan:
             self._execute(["prepare-write", "--session", session.id, "--plan", plan])

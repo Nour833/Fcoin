@@ -7,7 +7,18 @@ import json
 from pathlib import Path
 from typing import Any
 
-from fcoin.errors import ProfileError
+from fcoin.dump import CardImage
+from fcoin.errors import ProfileError, ValidationError
+from fcoin.value import ValueBlock
+
+
+@dataclass(frozen=True, slots=True)
+class DetectedValueGroup:
+    sector: int
+    value: int
+    blocks: tuple[int, ...]
+    encoded_addresses: tuple[int, ...]
+    write_modes: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,6 +103,106 @@ class CardProfile:
             raise ProfileError(
                 f"Card UID {uid.upper()} is not explicitly authorized by profile {self.name!r}."
             )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "description": self.description,
+            "lab_only": self.lab_only,
+            "allowed_uids": list(self.allowed_uids),
+            "fields": [
+                {
+                    "name": field.name,
+                    "type": "value_block",
+                    "block": field.block,
+                    "mirrors": list(field.mirrors),
+                    "scale": field.scale,
+                    "unit": field.unit,
+                    "minimum": field.minimum,
+                    "maximum": field.maximum,
+                    "writable": field.writable,
+                }
+                for field in self.fields
+            ],
+        }
+
+    def save(self, path: str | Path) -> Path:
+        target = Path(path).expanduser().resolve()
+        target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        target.write_text(json.dumps(self.to_dict(), indent=2) + "\n", encoding="utf-8")
+        target.chmod(0o600)
+        return target
+
+
+def detect_writable_value_groups(image: CardImage) -> tuple[DetectedValueGroup, ...]:
+    grouped: dict[tuple[int, int], list[tuple[int, ValueBlock, str]]] = {}
+    for sector in range(image.geometry.sector_count):
+        try:
+            trailer = image.sector_trailer(sector)
+        except ValidationError:
+            continue
+        for block in image.geometry.data_blocks(sector):
+            try:
+                decoded = ValueBlock.decode(image.block(block))
+                group = image.geometry.access_group_for_block(block)
+                permission = trailer.access.data_permissions(group)
+            except ValidationError:
+                continue
+            if permission.write == "never":
+                continue
+            grouped.setdefault((sector, decoded.value), []).append(
+                (block, decoded, permission.write)
+            )
+
+    result = []
+    for (sector, value), entries in sorted(grouped.items()):
+        entries.sort(key=lambda item: item[0])
+        result.append(
+            DetectedValueGroup(
+                sector=sector,
+                value=value,
+                blocks=tuple(item[0] for item in entries),
+                encoded_addresses=tuple(item[1].address for item in entries),
+                write_modes=tuple(item[2] for item in entries),
+            )
+        )
+    return tuple(result)
+
+
+def detected_profile(
+    image: CardImage,
+    group: DetectedValueGroup,
+    *,
+    name: str,
+    field_name: str,
+    scale: int,
+    unit: str,
+    minimum: str,
+    maximum: str,
+) -> CardProfile:
+    raw = {
+        "name": name,
+        "description": (
+            "UID-bound profile created from a structurally valid value block "
+            "in an immutable FCOIN backup."
+        ),
+        "lab_only": True,
+        "allowed_uids": [image.manufacturer.uid_hex],
+        "fields": [
+            {
+                "name": field_name,
+                "type": "value_block",
+                "block": group.blocks[0],
+                "mirrors": list(group.blocks[1:]),
+                "scale": scale,
+                "unit": unit,
+                "minimum": minimum,
+                "maximum": maximum,
+                "writable": True,
+            }
+        ],
+    }
+    return CardProfile.from_dict(raw)
 
 
 def profile_template(uid: str, block: int, mirrors: tuple[int, ...]) -> dict[str, Any]:

@@ -13,7 +13,7 @@
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-45E1FF?style=flat-square&logo=python&logoColor=0B0F14)](https://python.org)
 [![Zero runtime dependencies](https://img.shields.io/badge/runtime_dependencies-0-7DFFB2?style=flat-square)](#installation)
-[![Tests](https://img.shields.io/badge/tests-29_passing-7DFFB2?style=flat-square)](#development)
+[![Tests](https://img.shields.io/badge/tests-40_passing-7DFFB2?style=flat-square)](#development)
 [![License: MIT](https://img.shields.io/badge/license-MIT-FFCF70?style=flat-square)](LICENSE)
 
 **Acquire. Validate. Understand. Plan. Record. Verify. Recover.**
@@ -51,6 +51,21 @@ The dashboard provides guided menus for:
 - Transaction preparation, verification, recovery, history, and journals.
 
 File prompts automatically list compatible files in the current directory and always provide a manual-path option. Session prompts display the UID, transaction state, card type, and session ID.
+
+Every menu also displays a live status rail:
+
+```text
+● NFC TOOL  │  ● READER ONLINE  │  ● CARD 04453501DB2480
+```
+
+The rail updates while a menu remains open. Green indicates available/present, amber indicates no card, red indicates unavailable/offline, and violet indicates that hardware monitoring is intentionally paused.
+
+The monitor is read-only and has strict operation isolation:
+
+- It pauses and waits for any in-progress probe to finish before card acquisition, verification, recovery, or transaction commands begin.
+- It never writes card data or modifies FCOIN files.
+- When a session is `write_pending` or `recovery_planned`, all hardware probing stops—not only card polling—so an external writer cannot compete with FCOIN for the reader.
+- The rail then displays `MONITOR PAUSED │ SAFE WRITE MODE` until the protected state is resolved.
 
 Incomplete direct commands also enter the relevant wizard when used in a terminal:
 
@@ -360,6 +375,19 @@ Find the session ID:
 fcoin history
 ```
 
+In the interactive dashboard, choose:
+
+```text
+Safe laboratory editing
+└── Plan a value change
+    ├── Select the verified backup once
+    └── Detect valid value blocks in this backup
+```
+
+The backup is not requested again. FCOIN displays structurally valid and writable value-block candidates from that selected backup. It can create the exact-UID profile inside the session, or you can explicitly choose an existing reviewed profile.
+
+Equal values in the same sector are suggested as possible mirrors, but they are not silently accepted as mirrors. You must explicitly confirm the group; otherwise, choose one primary block.
+
 Create the plan:
 
 ```bash
@@ -556,6 +584,8 @@ src/fcoin/
 ├── storage.py        Secure immutable session storage
 ├── reporting.py      JSON and HTML reports
 ├── ui.py             Dependency-free styled terminal interface
+├── interactive.py    Guided menus, file/session selection, and workflow wizards
+├── status.py         Read-only live reader/card monitor with operation lock
 └── cli.py            Command orchestration
 ```
 
@@ -581,7 +611,10 @@ The suite covers:
 - MFD/MCT round trips.
 - Explainable detection and comparison.
 - UID/profile authorization.
+- Detected value grouping and in-session profile creation.
 - Surgical collateral protection.
+- Live reader/card status parsing and zero-probe safe-write mode.
+- Monitor drain barriers before card operations.
 - Plan-hash tampering.
 - Snapshot permissions and mismatched reads.
 - Journal tampering.

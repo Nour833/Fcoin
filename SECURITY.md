@@ -31,6 +31,7 @@ FCOIN treats these as security boundaries:
 - Detection of collateral changes.
 - Hash-chained durable transaction records.
 - Secure session and artifact permissions.
+- Live reader monitoring is drained before card operations and fully disabled while a write or recovery is pending.
 
 ## Sensitive data
 

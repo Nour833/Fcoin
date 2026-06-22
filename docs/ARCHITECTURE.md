@@ -47,7 +47,14 @@ Live inspection follows the acquisition trust model rather than bypassing it: th
 - `reporting.py` creates archiveable output.
 - `ui.py` presents styled terminal data without runtime dependencies.
 - `interactive.py` provides arrow-key menus, file/session pickers, and guided workflows.
+- `status.py` provides read-only reader/card presence monitoring with an operation lock.
 - `cli.py` connects commands to domain operations.
+
+## Live-status isolation
+
+The interactive status rail uses non-invasive libnfc utilities only while FCOIN is idle in a menu. Before any acquisition, verification, recovery, or transaction command, the monitor sets a pause barrier and waits for an active probe to finish.
+
+When a session enters `write_pending` or `recovery_planned`, the monitor performs no libnfc subprocess calls. The dashboard remains available but displays safe-write mode until the transaction leaves the protected state. The monitor never writes card data and never opens session artifacts for mutation.
 
 ## Transaction states
 
