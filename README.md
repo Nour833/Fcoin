@@ -13,7 +13,7 @@
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-45E1FF?style=flat-square&logo=python&logoColor=0B0F14)](https://python.org)
 [![Zero runtime dependencies](https://img.shields.io/badge/runtime_dependencies-0-7DFFB2?style=flat-square)](#installation)
-[![Tests](https://img.shields.io/badge/tests-21_passing-7DFFB2?style=flat-square)](#development)
+[![Tests](https://img.shields.io/badge/tests-27_passing-7DFFB2?style=flat-square)](#development)
 [![License: MIT](https://img.shields.io/badge/license-MIT-FFCF70?style=flat-square)](LICENSE)
 
 **Acquire. Validate. Understand. Plan. Record. Verify. Recover.**
@@ -25,6 +25,42 @@
 FCOIN is an offline-first toolkit for examining and safely maintaining MIFARE Classic cards that you own or are explicitly authorized to test. It replaces the original single-script prototype with a structured package, deterministic analysis engine, immutable snapshots, exact access-condition decoding, surgical change plans, tamper-evident write journals, post-write verification, and recovery planning.
 
 FCOIN does not silently write cards, install packages with `sudo`, upload dumps, or treat heuristic guesses as facts.
+
+## Interactive control center
+
+Run FCOIN without arguments:
+
+```bash
+fcoin
+```
+
+This opens a colorful full-screen dashboard instead of printing raw command help. Navigate with:
+
+- `↑` / `↓` or `j` / `k` to move.
+- `ENTER` to open the selected workflow.
+- Number keys for immediate shortcuts.
+- `b` or `ESC` to go back.
+- `q` to exit cleanly.
+
+The dashboard provides guided menus for:
+
+- Reader and imported-dump backups.
+- Inspection, validation, comparison, and evidence questions.
+- Reports, conversion, inference, and inventory.
+- Owned-laboratory profile and value-plan workflows.
+- Transaction preparation, verification, recovery, history, and journals.
+
+File prompts automatically list compatible files in the current directory and always provide a manual-path option. Session prompts display the UID, transaction state, card type, and session ID.
+
+Incomplete direct commands also enter the relevant wizard when used in a terminal:
+
+```bash
+fcoin inspect
+fcoin compare
+fcoin backup
+```
+
+Fully specified commands remain unchanged for scripts and automation. Friendly aliases such as `fcoin --inspect` and `fcoin --doctor` are also accepted.
 
 ## What changed in 2.0
 
@@ -106,7 +142,7 @@ FCOIN itself has no third-party Python runtime dependencies.
 git clone https://github.com/Nour833/Fcoin.git
 cd Fcoin
 python3 -m pip install -e .
-fcoin --help
+fcoin
 ```
 
 It can also run directly from a checkout:
@@ -178,6 +214,8 @@ fcoin inspect card.mfd --json
 ```
 
 The analyzer reports protocol facts and candidates separately. A structurally valid value block is a fact; calling that value a balance requires a trusted profile or controlled evidence.
+
+The default terminal view hides routine empty blocks and valid sector trailers so important findings remain readable. Use `--all` for the complete forensic table.
 
 ### 4. Compare controlled states
 
@@ -463,6 +501,8 @@ Sensitive artifacts use mode `0600`; session directories use `0700`. Dumps, keys
 | `journal` | Verify and display the transaction hash chain |
 
 Every analysis-oriented command supports plain terminal output or JSON where appropriate. Set `NO_COLOR=1` or use `--no-color` for non-ANSI output.
+
+Use `fcoin --help` when you specifically want the complete non-interactive argparse reference instead of the dashboard.
 
 ## Architecture
 

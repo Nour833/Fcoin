@@ -15,7 +15,7 @@ if str(SRC) not in sys.path:
 # package directory as its submodule path instead of shadowing it.
 if __name__ == "fcoin":
     __path__ = [str(SRC / "fcoin")]
-    __version__ = "2.0.0"
+    __version__ = "2.1.0"
 
 from fcoin.cli import main  # noqa: E402
 

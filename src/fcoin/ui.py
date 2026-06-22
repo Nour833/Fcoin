@@ -47,6 +47,18 @@ class Palette:
     def slate(self) -> str:
         return self.code("\033[38;5;103m")
 
+    @property
+    def violet(self) -> str:
+        return self.code("\033[38;5;141m")
+
+    @property
+    def white(self) -> str:
+        return self.code("\033[38;5;255m")
+
+    @property
+    def inverse(self) -> str:
+        return self.code("\033[7m")
+
 
 class Console:
     def __init__(self, *, color: bool | None = None):
@@ -71,6 +83,55 @@ class Console:
         rule = f"{p.slate}{'─' * min(self.width, 96)}{p.reset}"
         print(mark)
         print(rule)
+
+    def clear(self) -> None:
+        if sys.stdout.isatty():
+            print("\033[2J\033[H", end="")
+
+    def logo(self) -> None:
+        p = self.p
+        print(
+            f"{p.cyan}{p.bold}"
+            "  ███████╗ ██████╗ ██████╗ ██╗███╗   ██╗\n"
+            "  ██╔════╝██╔════╝██╔═══██╗██║████╗  ██║\n"
+            "  █████╗  ██║     ██║   ██║██║██╔██╗ ██║\n"
+            "  ██╔══╝  ██║     ██║   ██║██║██║╚██╗██║\n"
+            "  ██║     ╚██████╗╚██████╔╝██║██║ ╚████║\n"
+            "  ╚═╝      ╚═════╝ ╚═════╝ ╚═╝╚═╝  ╚═══╝"
+            f"{p.reset}"
+        )
+
+    def paragraph(self, text: str, indent: int = 0) -> None:
+        width = max(40, min(self.width - indent, 100))
+        words = text.split()
+        line = " " * indent
+        for word in words:
+            candidate = f"{line} {word}" if line.strip() else f"{line}{word}"
+            if len(candidate) > width:
+                print(line)
+                line = (" " * indent) + word
+            else:
+                line = candidate
+        if line.strip():
+            print(line)
+
+    def prompt(self, label: str, default: str | None = None) -> str:
+        suffix = f" {self.p.dim}[{default}]{self.p.reset}" if default else ""
+        value = input(f"{self.p.cyan}›{self.p.reset} {label}{suffix}: ").strip()
+        return value or (default or "")
+
+    def confirm(self, question: str, default: bool = False) -> bool:
+        hint = "Y/n" if default else "y/N"
+        answer = self.prompt(f"{question} ({hint})").casefold()
+        if not answer:
+            return default
+        return answer in {"y", "yes"}
+
+    def pause(self, message: str = "Press ENTER to return to the menu") -> None:
+        try:
+            input(f"\n{self.p.slate}{message}{self.p.reset}")
+        except EOFError:
+            return
 
     def section(self, title: str, detail: str = "") -> None:
         p = self.p

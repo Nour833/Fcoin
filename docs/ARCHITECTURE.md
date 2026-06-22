@@ -44,6 +44,7 @@ An analysis finding is not an authorization. A writable plan additionally requir
 - `formats.py` converts complete images.
 - `reporting.py` creates archiveable output.
 - `ui.py` presents styled terminal data without runtime dependencies.
+- `interactive.py` provides arrow-key menus, file/session pickers, and guided workflows.
 - `cli.py` connects commands to domain operations.
 
 ## Transaction states

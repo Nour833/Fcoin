@@ -15,6 +15,7 @@ from fcoin.compare import compare_images
 from fcoin.dump import CardImage
 from fcoin.errors import FcoinError, ValidationError
 from fcoin.formats import read_mct, write_mct
+from fcoin.interactive import InteractiveApp
 from fcoin.intelligence import answer_question, infer_value_candidates
 from fcoin.journal import Journal
 from fcoin.plans import ChangePlan, apply_plan, create_value_plan
@@ -66,38 +67,44 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command")
 
     inspect_parser = sub.add_parser("inspect", help="Analyze a dump with explainable detectors.")
-    inspect_parser.add_argument("dump")
+    inspect_parser.add_argument("dump", nargs="?")
     inspect_parser.add_argument(
-        "--all", action="store_true", help="Display low-confidence binary interpretations."
+        "--all",
+        action="store_true",
+        help="Display empty blocks, valid trailers, and low-confidence interpretations.",
     )
     _add_json_flag(inspect_parser)
 
     validate_parser = sub.add_parser("validate", help="Validate dump geometry and integrity.")
-    validate_parser.add_argument("dump")
+    validate_parser.add_argument("dump", nargs="?")
     _add_json_flag(validate_parser)
 
     compare_parser = sub.add_parser("compare", help="Show exact block and bit differences.")
-    compare_parser.add_argument("before")
-    compare_parser.add_argument("after")
+    compare_parser.add_argument("before", nargs="?")
+    compare_parser.add_argument("after", nargs="?")
     _add_json_flag(compare_parser)
 
     report_parser = sub.add_parser("report", help="Generate a JSON or self-contained HTML report.")
-    report_parser.add_argument("dump")
+    report_parser.add_argument("dump", nargs="?")
     report_parser.add_argument("--format", choices=("html", "json"), default="html")
-    report_parser.add_argument("-o", "--output", required=True)
+    report_parser.add_argument("-o", "--output")
 
     convert_parser = sub.add_parser(
         "convert", help="Convert complete binary MFD and MCT text dumps."
     )
-    convert_parser.add_argument("input")
-    convert_parser.add_argument("--from", dest="source_format", choices=("mfd", "mct"), required=True)
-    convert_parser.add_argument("--to", dest="target_format", choices=("mfd", "mct"), required=True)
-    convert_parser.add_argument("-o", "--output", required=True)
+    convert_parser.add_argument("input", nargs="?")
+    convert_parser.add_argument("--from", dest="source_format", choices=("mfd", "mct"))
+    convert_parser.add_argument("--to", dest="target_format", choices=("mfd", "mct"))
+    convert_parser.add_argument("-o", "--output")
 
     backup_parser = sub.add_parser("backup", help="Create an immutable secure card snapshot.")
-    source = backup_parser.add_mutually_exclusive_group(required=True)
+    source = backup_parser.add_mutually_exclusive_group()
     source.add_argument("--from-dump", help="Import an existing MFD file.")
-    source.add_argument("--reader", action="store_true", help="Acquire two matching reads with mfoc.")
+    source.add_argument(
+        "--reader",
+        action="store_true",
+        help="Acquire two matching reads with mfoc.",
+    )
     backup_parser.add_argument(
         "--confirmation", help="Second independently acquired dump for import verification."
     )
@@ -113,41 +120,40 @@ def build_parser() -> argparse.ArgumentParser:
     _add_json_flag(doctor_parser)
 
     inventory_parser = sub.add_parser("inventory", help="Index all MFD files in a directory.")
-    inventory_parser.add_argument("directory")
+    inventory_parser.add_argument("directory", nargs="?")
     inventory_parser.add_argument("--recursive", action="store_true")
     _add_json_flag(inventory_parser)
 
     infer_parser = sub.add_parser(
         "infer", help="Find structural value-block candidates across multiple dumps."
     )
-    infer_parser.add_argument("dumps", nargs="+")
+    infer_parser.add_argument("dumps", nargs="*")
     infer_parser.add_argument("-o", "--output")
     _add_json_flag(infer_parser)
 
     ask_parser = sub.add_parser(
         "ask", help="Ask a deterministic evidence-backed question about a dump."
     )
-    ask_parser.add_argument("dump")
-    ask_parser.add_argument("question")
+    ask_parser.add_argument("dump", nargs="?")
+    ask_parser.add_argument("question", nargs="?")
 
     profile_parser = sub.add_parser(
         "profile-init", help="Create a UID-bound owned-lab-card profile template."
     )
-    profile_parser.add_argument("dump")
-    profile_parser.add_argument("--block", type=int, required=True)
+    profile_parser.add_argument("dump", nargs="?")
+    profile_parser.add_argument("--block", type=int)
     profile_parser.add_argument("--mirror", type=int, action="append", default=[])
-    profile_parser.add_argument("-o", "--output", required=True)
+    profile_parser.add_argument("-o", "--output")
 
     plan_parser = sub.add_parser(
         "plan-value", help="Plan a profile-bound value edit for an owned laboratory card."
     )
-    plan_parser.add_argument("--session", required=True)
-    plan_parser.add_argument("--profile", required=True)
-    plan_parser.add_argument("--field", required=True)
-    plan_parser.add_argument("--value", required=True)
+    plan_parser.add_argument("--session")
+    plan_parser.add_argument("--profile")
+    plan_parser.add_argument("--field")
+    plan_parser.add_argument("--value")
     plan_parser.add_argument(
         "--authorize",
-        required=True,
         help='Required exact text: "I OWN THIS LAB CARD".',
     )
     plan_parser.add_argument("-o", "--output")
@@ -155,24 +161,28 @@ def build_parser() -> argparse.ArgumentParser:
     apply_parser = sub.add_parser(
         "apply-plan", help="Apply a validated plan to an offline image and verify it."
     )
-    apply_parser.add_argument("dump")
-    apply_parser.add_argument("plan")
-    apply_parser.add_argument("-o", "--output", required=True)
+    apply_parser.add_argument("dump", nargs="?")
+    apply_parser.add_argument("plan", nargs="?")
+    apply_parser.add_argument("-o", "--output")
 
     prepare_parser = sub.add_parser(
         "prepare-write",
         help="Create durable journal and exact block payloads for an external block-wise writer.",
     )
-    prepare_parser.add_argument("--session", required=True)
-    prepare_parser.add_argument("--plan", required=True)
+    prepare_parser.add_argument("--session")
+    prepare_parser.add_argument("--plan")
 
     verify_parser = sub.add_parser(
         "verify-write", help="Verify a post-write card image and detect collateral changes."
     )
-    verify_parser.add_argument("--session", required=True)
-    observed = verify_parser.add_mutually_exclusive_group(required=True)
+    verify_parser.add_argument("--session")
+    observed = verify_parser.add_mutually_exclusive_group()
     observed.add_argument("--observed", help="Post-write MFD image.")
-    observed.add_argument("--reader", action="store_true", help="Acquire post-write image with mfoc.")
+    observed.add_argument(
+        "--reader",
+        action="store_true",
+        help="Acquire post-write image with mfoc.",
+    )
     verify_parser.add_argument(
         "--confirmation",
         help="Second independently acquired post-write dump; required with --observed.",
@@ -184,17 +194,16 @@ def build_parser() -> argparse.ArgumentParser:
     recover_parser = sub.add_parser(
         "recover", help="Create a restoration plan from an immutable session snapshot."
     )
-    recover_parser.add_argument("--session", required=True)
-    recover_parser.add_argument("--current", required=True)
+    recover_parser.add_argument("--session")
+    recover_parser.add_argument("--current")
     recover_parser.add_argument(
         "--authorize",
-        required=True,
         help='Required exact text: "RESTORE MY OWN CARD".',
     )
     recover_parser.add_argument("-o", "--output")
 
     journal_parser = sub.add_parser("journal", help="Verify and display a transaction journal.")
-    journal_parser.add_argument("--session", required=True)
+    journal_parser.add_argument("--session")
     _add_json_flag(journal_parser)
 
     return parser
@@ -202,7 +211,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _summary_rows(report: Any, include_all: bool) -> list[tuple[object, ...]]:
     rows: list[tuple[object, ...]] = []
-    excluded = {"integer_candidates"} if not include_all else set()
+    excluded = {"integer_candidates", "empty", "access_conditions"} if not include_all else set()
     for finding in report.findings:
         if finding.kind in excluded:
             continue
@@ -232,10 +241,12 @@ def command_inspect(args: argparse.Namespace, console: Console, _: SessionStore)
     if report.warnings:
         for warning in report.warnings:
             console.warning(warning)
-    console.section("EXPLAINABLE FINDINGS", f"{len(report.findings)} total")
+    rows = _summary_rows(report, args.all)
+    detail = f"{len(rows)} shown · {len(report.findings)} total"
+    console.section("EXPLAINABLE FINDINGS", detail)
     console.table(
         ("BLOCK", "SECTOR", "TYPE", "EVIDENCE SUMMARY", "CONF."),
-        _summary_rows(report, args.all),
+        rows,
     )
     return 0
 
@@ -673,15 +684,61 @@ def _overview(console: Console, parser: argparse.ArgumentParser) -> None:
     parser.print_help()
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    console = Console(color=False if args.no_color else None)
-    if not args.command:
-        _overview(console, parser)
-        return 0
+def _missing_arguments(args: argparse.Namespace) -> tuple[str, ...]:
+    requirements: dict[str, tuple[str, ...]] = {
+        "inspect": ("dump",),
+        "validate": ("dump",),
+        "compare": ("before", "after"),
+        "report": ("dump", "output"),
+        "convert": ("input", "source_format", "target_format", "output"),
+        "inventory": ("directory",),
+        "ask": ("dump", "question"),
+        "profile-init": ("dump", "block", "output"),
+        "plan-value": ("session", "profile", "field", "value", "authorize"),
+        "apply-plan": ("dump", "plan", "output"),
+        "prepare-write": ("session", "plan"),
+        "recover": ("session", "current", "authorize"),
+        "journal": ("session",),
+    }
+    missing = [
+        name
+        for name in requirements.get(args.command, ())
+        if getattr(args, name, None) in {None, ""}
+    ]
+    if args.command == "backup" and not (args.from_dump or args.reader):
+        missing.append("source (--reader or --from-dump)")
+    if args.command == "infer" and len(args.dumps) < 2:
+        missing.append("at least two dumps")
+    if args.command == "verify-write":
+        if not args.session:
+            missing.append("session")
+        if not (args.reader or args.observed):
+            missing.append("source (--reader or --observed)")
+        if args.observed and not args.confirmation:
+            missing.append("confirmation")
+    return tuple(missing)
+
+
+def _normalize_argv(argv: list[str]) -> list[str]:
+    aliases = {
+        "-inspect": "inspect",
+        "--inspect": "inspect",
+        "-backup": "backup",
+        "--backup": "backup",
+        "-doctor": "doctor",
+        "--doctor": "doctor",
+        "-history": "history",
+        "--history": "history",
+    }
+    return [aliases.get(token, token) for token in argv]
+
+
+def _run_safely(
+    args: argparse.Namespace,
+    console: Console,
+    store: SessionStore,
+) -> int:
     try:
-        store = SessionStore(args.home)
         return COMMANDS[args.command](args, console, store)
     except KeyboardInterrupt:
         console.error("Interrupted; no uncommitted in-memory operation was continued.")
@@ -692,3 +749,37 @@ def main(argv: list[str] | None = None) -> int:
     except OSError as exc:
         console.error(f"Operating-system error: {exc}")
         return 2
+
+
+def main(argv: list[str] | None = None) -> int:
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
+    raw_argv = _normalize_argv(raw_argv)
+    parser = build_parser()
+    args = parser.parse_args(raw_argv)
+    console = Console(color=False if args.no_color else None)
+    store = SessionStore(args.home)
+    interactive = sys.stdin.isatty() and sys.stdout.isatty()
+
+    def run_guided(command_argv: list[str]) -> int:
+        guided_args = parser.parse_args(command_argv)
+        missing = _missing_arguments(guided_args)
+        if missing:
+            console.error(
+                f"Guided workflow produced an incomplete command: {', '.join(missing)}."
+            )
+            return 2
+        return _run_safely(guided_args, console, store)
+
+    if not args.command:
+        if interactive:
+            return InteractiveApp(console, store, run_guided).run()
+        _overview(console, parser)
+        return 0
+    missing = _missing_arguments(args)
+    if missing:
+        if interactive:
+            return InteractiveApp(console, store, run_guided).run(args.command)
+        parser.error(
+            f"{args.command} is missing required input: {', '.join(missing)}"
+        )
+    return _run_safely(args, console, store)
